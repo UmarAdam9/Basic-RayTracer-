@@ -1,0 +1,304 @@
+#version 330 core
+out vec4 FragColor;
+
+
+
+//=================== uniform declarations=========================================================================
+uniform mat4 ProjMatrix;
+uniform mat4 ViewMatrix;
+uniform vec3 camPos;
+//=================== structure definitions =========================================================================
+
+struct Ray
+{
+    vec3 rayOrigin;
+    vec3 raydirection;
+};
+
+
+
+struct Sphere
+{
+    vec3 origin ;
+    vec3 color ;
+    float radius ;
+};
+
+struct Scene
+{
+    Sphere spheres[6];
+    Ray lightSource; //because it is a directional light , the origin doesn't matter
+
+};
+
+struct HitPayLoad
+{
+    float hitDistance;
+    vec3 worldPosition;
+    vec3 worldNormal;
+    int objectIndex;
+};
+
+//===============================Global variables======================================================
+ Scene scene;
+
+//===============================Function Implementations=================================================
+
+
+vec4 TraceRay(Scene scene ,Ray ray )
+{
+    vec4 FragColor = vec4(0.0f,0.0f,0.0f,0.0f);
+
+
+    //iterate through the array
+        int min_index=-1;
+        float min_distance = 1000000.0f;
+        for(int i=0 ; i<scene.spheres.length();i++)
+        {
+            //equation of circle ray intersection
+            vec3 origin = ray.rayOrigin - scene.spheres[i].origin;
+            float a = dot(ray.raydirection,ray.raydirection);
+            float b = 2.0f * dot(origin,ray.raydirection);
+            float c = dot(origin,origin) - scene.spheres[i].radius * scene.spheres[i].radius;
+            float discriminant = b*b  - 4.0f*a*c;
+
+
+
+            if(discriminant<0.0f)
+                continue;
+
+            else
+            {
+                float t0 = (-b - sqrt(b * b - 4.0f * a * c) ) / (2.0f * a);
+                float t1 = (-b + sqrt(b * b - 4.0f * a * c) ) / (2.0f * a);
+
+                //check if the hit distance is minimum distance
+                if(t0>0.0f && t0 < min_distance)
+                {
+                    //update the minimums
+                    min_distance = t0;
+                    min_index=i;
+                }
+            }
+
+        }
+
+        if(min_index == -1) //wow cherno actually did this afterwards grape
+            FragColor = vec4(0.0f,0.0f,0.0f,1.0f);
+
+        else{
+
+          //calculate the hit point (2 solutions of t)
+            vec3 origin = ray.rayOrigin - scene.spheres[min_index].origin;
+            vec3 hitPos0 = origin + ray.raydirection *min_distance;
+
+
+          //update the normal calculation
+            vec3 normal = normalize(hitPos0);
+
+
+         //lighting
+            float d = max(dot(normal,-scene.lightSource.raydirection),0.0f);
+            scene.spheres[min_index].color*=d;
+
+
+
+            FragColor = vec4(scene.spheres[min_index].color,1.0f);
+
+            }
+
+
+    return FragColor;
+}
+
+
+
+
+HitPayLoad ClosestHit(Ray ray, int objectIndex, float hitDistance)
+{
+    HitPayLoad payload;
+
+    //calculate the hit point (2 solutions of t)
+        vec3 origin = ray.rayOrigin - scene.spheres[objectIndex].origin;
+        vec3 hitPos0 = origin + ray.raydirection *hitDistance;
+
+
+    //update the normal calculation
+        vec3 normal = normalize(hitPos0);
+
+    //assign to payload
+        payload.hitDistance = hitDistance;
+        payload.objectIndex = objectIndex;
+        payload.worldPosition = hitPos0;     //A better way would have been to assign them during the calculation part instead of making new variables but oh well
+        payload.worldNormal = normal;
+        payload.worldPosition+=scene.spheres[objectIndex].origin; // Ookay why did we just do that?
+
+
+
+    return payload;
+}
+
+
+
+
+HitPayLoad Miss(Ray ray)
+{
+    HitPayLoad payload;
+    payload.hitDistance = -1;
+    return payload;
+}
+
+
+
+
+
+
+HitPayLoad TraceRay(Ray ray){  //makes calculations and , depending upon whether or not the ray hits anything ,calls ClosestHit or Miss function
+
+    HitPayLoad payload;
+
+    //make the calculations by iterating over the scene
+     //iterate through the array
+        int min_index=-1;
+        float min_distance = 1000000.0f;
+        for(int i=0 ; i<scene.spheres.length();i++)
+        {
+            //equation of circle ray intersection
+            vec3 origin = ray.rayOrigin - scene.spheres[i].origin;
+            float a = dot(ray.raydirection,ray.raydirection);
+            float b = 2.0f * dot(origin,ray.raydirection);
+            float c = dot(origin,origin) - scene.spheres[i].radius * scene.spheres[i].radius;
+            float discriminant = b*b  - 4.0f*a*c;
+
+
+
+            if(discriminant<0.0f)
+                continue;
+
+            else
+            {
+                float t0 = (-b - sqrt(b * b - 4.0f * a * c) ) / (2.0f * a);
+                float t1 = (-b + sqrt(b * b - 4.0f * a * c) ) / (2.0f * a);
+
+                //check if the hit distance is minimum distance
+                if(t0>0.0f && t0 < min_distance)
+                {
+                    //update the minimums
+                    min_distance = t0;
+                    min_index=i;
+                }
+            }
+
+        }
+
+    if(min_index == -1)
+        payload = Miss(ray);
+
+    else
+        payload = ClosestHit(ray, min_index , min_distance);
+
+
+    return payload;
+}
+
+
+
+
+
+
+vec4 PerPixel()
+{
+     HitPayLoad payload;
+
+     Ray ray;
+
+     //scene setup
+        scene.spheres[0] = Sphere(vec3(0.0f,0.0f,0.0f) , vec3(0.0f,1.0f,0.0f) , 0.5f);
+        scene.spheres[1] = Sphere(vec3(0.0f,-25.5f,0.0f) , vec3(1.0f,1.0f,1.0f) , 25.0f);
+        scene.spheres[2] = Sphere(vec3(1.0f,0.0f,1.0f) , vec3(1.0f,0.0f,0.0f) , 0.5f);
+        scene.spheres[3] = Sphere(vec3(1.0f,0.0f,-1.0f) , vec3(1.0f,0.0f,0.906f) , 0.5f);
+        scene.spheres[4] = Sphere(vec3(-1.0f,0.0f,1.0f) , vec3(0.0f,0.0f,1.0f) , 0.5f);
+        scene.spheres[5] = Sphere(vec3(-1.0f,0.0f,-1.0f) , vec3(1.0f,0.984f,0.0f) , 0.5f);
+
+        scene.lightSource.raydirection = normalize(vec3(-1.0f, -1.0f, -1.0f));
+
+    //ray setup
+
+        //inverse of view and projection camera matrices
+            mat4 inverseView = inverse(ViewMatrix);
+            mat4 inverseProj = inverse(ProjMatrix);
+
+        //pixel coordinates
+            vec3 coords = vec3(gl_FragCoord.x/800.0f,gl_FragCoord.y/800.0f,-1.0f);
+            coords.x = coords.x* 2.0f - 1.0f;
+            coords.y = coords.y* 2.0f - 1.0f;
+
+
+         //Ray stuff calculated after transforming by camera matrices
+            ray.rayOrigin = camPos;
+            vec4 target = inverseProj * vec4(coords.x,coords.y,1,1); //why 1,1? doesnt matter because projection matrix deals with 2d anyway but we need the other coordinates for matrix multiplication (w has to be 1)
+            ray.raydirection = vec3(inverseView * vec4(normalize(vec3(target)/target.w),0));   //normalize it if u want to
+
+
+    //bounce ray twice
+
+    int bounces =2;
+    vec3 color;
+    float multiplier=1;
+
+    for(int i=0; i<bounces;i++)
+    {
+         //Shoot the ray, get payload back and set color based on what it hit
+
+        //get the payload
+            payload = TraceRay(ray);
+
+        //if it missed assign background color
+
+            if(payload.hitDistance < 0)
+            {
+                vec3 skyColor = vec3(0.0f,0.0f,0.0f);
+                color+=skyColor*multiplier;
+                break;
+            }
+
+        //if it hit , perform calculations using the payload data
+
+            //lighting
+            float d = max(dot(payload.worldNormal,-scene.lightSource.raydirection),0.0f);
+            scene.spheres[payload.objectIndex].color*=d;
+            vec3 sphereColor = vec3(scene.spheres[payload.objectIndex].color.xyz );
+
+            color +=sphereColor*multiplier;
+            multiplier*=0.7f; //hack for now
+            ray.rayOrigin = payload.worldPosition + payload.worldNormal*0.0001f;
+            ray.raydirection = reflect(ray.raydirection,payload.worldNormal);
+    }
+
+
+
+
+    return vec4(color,1.0f);
+
+
+
+}
+
+
+
+
+
+
+
+//========================== main function===============================================================
+
+
+void main()
+{
+
+    FragColor = PerPixel();
+
+
+
+}
+
